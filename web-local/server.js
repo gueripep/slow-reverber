@@ -55,17 +55,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── Serve the SoundTouch AudioWorklet processor ─────────────────
-  if (u.pathname === '/soundtouch-processor.js') {
-    const procPath = path.join(__dirname, 'soundtouch-processor.js');
+  // ── Serve JS and CSS files ───────────────────────────────────────
+  if (u.pathname.endsWith('.js') || u.pathname.endsWith('.css')) {
+    const filePath = path.join(__dirname, u.pathname);
     try {
-      const js = fs.readFileSync(procPath);
-      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-      res.end(js);
-    } catch {
-      res.writeHead(500); res.end('Cannot read soundtouch-processor.js');
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath);
+        const ext = u.pathname.endsWith('.css') ? 'text/css' : 'text/javascript';
+        res.writeHead(200, { 'Content-Type': `${ext}; charset=utf-8` });
+        res.end(data);
+        return;
+      }
+    } catch (e) {
+      // pass
     }
-    return;
   }
 
   // ── Serve icons ───────────────────────────────────────────────────
