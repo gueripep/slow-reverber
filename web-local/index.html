@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>audio</title>
+  <title>Slowcort</title>
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="icon" href="favicon.ico">
   <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -19,8 +23,8 @@
       --accent-dim:#5A7254;
       --sand:      #C4A87C;
       --text:      #DDD5C4;
-      --text-mid:  #857D6E;
-      --text-dim:  #3E3A30;
+      --text-mid:  #A89E8D;
+      --text-dim:  #6E6858;
       --track:     #2B2820;
     }
 
@@ -313,11 +317,31 @@
       background: transparent;
       color: var(--text-dim);
       border: 1px solid var(--border);
-      font-size: 0.78rem;
-      padding: 0.65rem 1rem;
+      padding: 0;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
     }
+    #loopBtn svg { pointer-events: none; display: block; }
     #loopBtn:hover { color: var(--text-mid); border-color: var(--border-hi); }
     #loopBtn.active { color: var(--accent); border-color: var(--accent-dim); background: rgba(141,168,130,0.08); }
+
+    #prevBtn, #nextBtn {
+      background: transparent;
+      color: var(--text-dim);
+      border: none;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #prevBtn svg, #nextBtn svg { pointer-events: none; display: block; }
+    #prevBtn:hover, #nextBtn:hover { color: var(--text-mid); }
 
     /* ── YouTube import ── */
     .yt-divider {
@@ -501,6 +525,19 @@
     .player-song {
       flex: 1;
       min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 44px;
+    }
+    .player-song img {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: rgba(0,0,0,0.2);
+      flex-shrink: 0;
+      display: none;
     }
     .player-song-name {
       font-size: 0.82rem;
@@ -604,8 +641,11 @@
         <input type="range" id="reverbSlider" min="0" max="1" step="0.01" value="0.40">
         <span class="slider-val" id="reverbVal">55%</span>
       </div>
-      <div class="slider-row">
-        <span class="slider-label">pitch</span>
+      <div class="slider-row" id="pitchRow">
+        <span class="slider-label" style="display:flex;align-items:center;justify-content:flex-end;gap:0.35rem;">
+          pitch
+          <button id="pitchLinkBtn" title="Natural: speed and pitch move together (best quality)" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:0.75rem;color:var(--accent);opacity:0.5;flex-shrink:0;">⛓</button>
+        </span>
         <input type="range" id="pitchSlider" min="-24" max="12" step="0.5" value="-0.5">
         <span class="slider-val" id="pitchVal">−3st</span>
       </div>
@@ -622,13 +662,27 @@
   <input type="range" id="seekSlider" min="0" max="100" step="0.1" value="0" disabled>
   <div class="player-bar-inner">
     <div class="player-song">
+      <img id="playerCover" src="" alt="Album Cover">
       <div class="player-song-name empty" id="playerSongName">no track loaded</div>
     </div>
     <div class="player-controls">
+      <button class="btn" id="prevBtn" disabled title="Previous Track">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+      </button>
       <button class="btn" id="playBtn" disabled>
         <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="6,3 20,12 6,21"/></svg>
       </button>
-      <button class="btn" id="loopBtn">⟳</button>
+      <button class="btn" id="nextBtn" disabled title="Next Track">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+      </button>
+      <button class="btn" id="loopBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <polyline points="17 1 21 5 17 9"></polyline>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+          <polyline points="7 23 3 19 7 15"></polyline>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </svg>
+      </button>
     </div>
     <div class="player-time">
       <span id="seekCurrent">0:00</span>
@@ -760,6 +814,13 @@ let loopEnabled = true;
 let currentObjectURL = null;
 let currentFileKey   = null;
 
+// The ultimate Media Session fix: we feed the actual audio file into a hidden,
+// nearly-silent <audio> element. This gives macOS a legitimate track to monitor
+// (with the correct duration) instead of fighting Web Audio API bugs.
+const mediaBridge = document.createElement('audio');
+mediaBridge.volume = 0.00001; // completely inaudible (-100dB)
+document.body.appendChild(mediaBridge);
+
 // Seek tracking
 let seekContextStart = 0; // Tone.now() when play began
 let seekOffset       = 0; // seconds into buffer when play began
@@ -776,6 +837,8 @@ const changeFile    = document.getElementById('changeFile');
 const visualizer    = document.getElementById('visualizer');
 const ctx2d         = visualizer.getContext('2d');
 const playBtn       = document.getElementById('playBtn');
+const prevBtn       = document.getElementById('prevBtn');
+const nextBtn       = document.getElementById('nextBtn');
 const loopBtn       = document.getElementById('loopBtn');
 const statusEl      = document.getElementById('status');
 const historyList   = document.getElementById('historyList');
@@ -783,6 +846,7 @@ const seekSlider     = document.getElementById('seekSlider');
 const seekCurrent    = document.getElementById('seekCurrent');
 const seekTotal      = document.getElementById('seekTotal');
 const playerSongName = document.getElementById('playerSongName');
+const playerCover    = document.getElementById('playerCover');
 const ytInput        = document.getElementById('ytInput');
 const ytBtn          = document.getElementById('ytBtn');
 const ytProgressWrap = document.getElementById('ytProgressWrap');
@@ -818,18 +882,49 @@ function syncDisplayValues() {
   volumeVal.textContent = Math.round(parseFloat(volumeSlider.value) * 100) + '%';
   [speedSlider, reverbSlider, pitchSlider, volumeSlider].forEach(sliderFill);
 }
+// Restore global volume from localStorage
+const savedVolume = localStorage.getItem('globalVolume');
+if (savedVolume !== null) volumeSlider.value = savedVolume;
 syncDisplayValues();
 
-// Set speed and pitch independently via SoundTouch AudioWorklet
+// When true: no pitch shifting — speed and pitch coupled (best quality)
+let pitchNatural = false;
+
 function applyPlaybackRate() {
   const speed = parseFloat(speedSlider.value);
-  const pitchSt = parseFloat(pitchSlider.value);
-  if (sourceNode) sourceNode.playbackRate.value = speed;
-  if (stNode) {
-    stNode.parameters.get('pitchSemitones').value = pitchSt;
-    stNode.parameters.get('playbackRate').value = speed;
+  try { mediaBridge.playbackRate = speed; } catch (_) {}
+  
+  if (pitchNatural) {
+    // Vinyl mode: speed and pitch coupled — no pitch compensation
+    if (sourceNode) sourceNode.playbackRate.value = speed;
+    if (stNode) {
+      stNode.parameters.get('pitchSemitones').value = 0;
+      stNode.parameters.get('playbackRate').value = 1;
+    }
+  } else {
+    // Independent mode: sourceNode sets speed, stNode compensates pitch then shifts it
+    if (sourceNode) sourceNode.playbackRate.value = speed;
+    if (stNode) {
+      stNode.parameters.get('pitchSemitones').value = parseFloat(pitchSlider.value);
+      stNode.parameters.get('playbackRate').value = speed; // cancels pitch drift from sourceNode speed
+    }
   }
 }
+
+const pitchLinkBtn = document.getElementById('pitchLinkBtn');
+const pitchRow     = document.getElementById('pitchRow');
+
+pitchLinkBtn.addEventListener('click', () => {
+  pitchNatural = !pitchNatural;
+  pitchLinkBtn.style.opacity  = pitchNatural ? '1'    : '0.5';
+  pitchLinkBtn.title = pitchNatural
+    ? 'Natural: speed and pitch move together (best quality) — click to decouple'
+    : 'Natural: speed and pitch move together (best quality)';
+  pitchSlider.disabled        = pitchNatural;
+  pitchSlider.style.opacity   = pitchNatural ? '0.3'  : '1';
+  pitchVal.style.opacity      = pitchNatural ? '0.3'  : '1';
+  applyPlaybackRate();
+});
 
 // Debounced preset auto-save
 let presetSaveTimer = null;
@@ -847,7 +942,6 @@ function currentPreset() {
     speed:  parseFloat(speedSlider.value),
     reverb: parseFloat(reverbSlider.value),
     pitch:  parseFloat(pitchSlider.value),
-    volume: parseFloat(volumeSlider.value),
   };
 }
 
@@ -855,7 +949,6 @@ function applyPreset(p) {
   speedSlider.value  = p.speed;
   reverbSlider.value = p.reverb;
   pitchSlider.value  = p.pitch;
-  volumeSlider.value = p.volume ?? 1;
   syncDisplayValues();
 }
 
@@ -871,6 +964,9 @@ speedSlider.addEventListener('input', () => {
   }
   applyPlaybackRate();
   schedulePresetSave();
+  if (typeof updateMediaSessionPositionState === 'function') {
+    updateMediaSessionPositionState();
+  }
 });
 
 reverbSlider.addEventListener('input', () => {
@@ -892,7 +988,7 @@ volumeSlider.addEventListener('input', () => {
   volumeVal.textContent = Math.round(v * 100) + '%';
   sliderFill(volumeSlider);
   applyVolume(v);
-  schedulePresetSave();
+  localStorage.setItem('globalVolume', v);
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -964,15 +1060,35 @@ function createAndStartSource(offset = 0) {
   };
 }
 
-async function teardown() {
+async function fetchAlbumCover(query) {
+  try {
+    const cleanQuery = query.replace(/\.[^.]+$/, '').replace(/\[.*\]/g, '').replace(/\(.*\)/g, '').trim();
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=1`);
+    const data = await res.json();
+    if (data.results && data.results.length > 0) {
+      return data.results[0].artworkUrl100.replace('100x100bb', '512x512bb');
+    }
+  } catch (err) {
+    console.warn('Failed to fetch album cover', err);
+  }
+  return null;
+}
+
+async function teardown(clearUI = true) {
   stopSource();
   isPlaying = false;
   seekOffset = 0;
   resetSeekBar();
-  playerSongName.textContent = 'no track loaded';
-  playerSongName.classList.add('empty');
+  if (clearUI) {
+    playerSongName.textContent = 'no track loaded';
+    playerSongName.classList.add('empty');
+    playerCover.style.display = 'none';
+    playerCover.src = '';
+  }
   playBtn.innerHTML = ICON_PLAY;
   playBtn.classList.remove('playing');
+  prevBtn.disabled = true;
+  nextBtn.disabled = true;
   if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
   if (stNode)   { try { stNode.disconnect(); }       catch (_) {} stNode   = null; }
   if (bridgeGainNode) { try { bridgeGainNode.disconnect(); } catch (_) {} bridgeGainNode = null; }
@@ -980,19 +1096,60 @@ async function teardown() {
   if (analyser) { try { analyser.dispose(); }         catch (_) {} analyser = null; }
   if (currentObjectURL) { URL.revokeObjectURL(currentObjectURL); currentObjectURL = null; }
   audioBuffer = null;
+  try { mediaBridge.pause(); mediaBridge.removeAttribute('src'); mediaBridge.load(); } catch (_) {}
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = 'none';
+  }
 }
 
 // fileKey override lets history loads skip re-saving to DB
-async function loadFile(file, overrideKey = null, autoplay = false) {
-  await teardown();
+async function loadFile(file, overrideKey = null, autoplay = false, initialPos = 0) {
+  const fileKey = overrideKey ?? makeFileKey(file.name, file.size);
+  const displayName = file.name.replace(/\.[^.]+$/, '');
 
+  currentFileKey = fileKey;
+  playerSongName.textContent = displayName;
+  playerSongName.classList.remove('empty');
   fileBadgeName.textContent = file.name;
   fileBadge.classList.add('visible');
   dropzone.style.display = 'none';
   playBtn.disabled = true;
   setStatus('loading…', false);
 
-  currentFileKey = overrideKey ?? makeFileKey(file.name, file.size);
+  document.querySelectorAll('.history-item').forEach(el => {
+    const titleEl = el.querySelector('.history-item-name');
+    if (titleEl && titleEl.getAttribute('title') === file.name) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+
+  playerCover.style.display = 'none';
+  playerCover.src = '';
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: displayName, artist: 'Slowcort' });
+  }
+
+  fetchAlbumCover(displayName).then(coverUrl => {
+    if (currentFileKey === fileKey && coverUrl) {
+      playerCover.src = coverUrl;
+      playerCover.style.display = 'block';
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: displayName,
+          artist: 'Slowcort',
+          artwork: [
+            { src: coverUrl, sizes: '512x512', type: 'image/jpeg' },
+            { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
+            { src: coverUrl, sizes: '128x128', type: 'image/jpeg' }
+          ]
+        });
+      }
+    }
+  });
+
+  await teardown(false);
 
   // Get the raw ArrayBuffer (also persists to IndexedDB if new)
   let rawBuf;
@@ -1006,6 +1163,14 @@ async function loadFile(file, overrideKey = null, autoplay = false) {
     }
   } else {
     rawBuf = await file.arrayBuffer();
+  }
+
+  // Load the file into our hidden dummy element for OS Media Session syncing
+  try {
+    currentObjectURL = URL.createObjectURL(new Blob([rawBuf], { type: file.type || 'audio/mpeg' }));
+    mediaBridge.src = currentObjectURL;
+  } catch (err) {
+    console.warn('Failed to attach media bridge:', err);
   }
 
   try {
@@ -1026,9 +1191,8 @@ async function loadFile(file, overrideKey = null, autoplay = false) {
       outputChannelCount: [2],
     });
     const speed = parseFloat(speedSlider.value);
-    const pitchSt = parseFloat(pitchSlider.value);
-    stNode.parameters.get('pitchSemitones').value = pitchSt;
-    stNode.parameters.get('playbackRate').value = speed;
+    stNode.parameters.get('pitchSemitones').value = pitchNatural ? 0 : parseFloat(pitchSlider.value);
+    stNode.parameters.get('playbackRate').value = pitchNatural ? 1 : speed; // compensates pitch drift from sourceNode speed
 
     // Create Tone.js effects chain
     analyser = new Tone.Analyser('fft', 256);
@@ -1047,25 +1211,24 @@ async function loadFile(file, overrideKey = null, autoplay = false) {
     // Volume
     applyVolume();
 
-    initSeekBar();
+    initSeekBar(initialPos);
     playBtn.disabled = false;
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
     visualizer.classList.add('visible');
     startVisualizer();
-    const displayName = file.name.replace(/\.[^.]+$/, '');
-    playerSongName.textContent = displayName;
-    playerSongName.classList.remove('empty');
     setStatus('ready', true);
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'none';
+      updateMediaSessionPositionState();
+    }
 
     renderHistory();
 
     if (autoplay) {
-      createAndStartSource(0);
-      seekContextStart = Tone.now();
-      seekOffset = 0;
-      isPlaying = true;
-      playBtn.innerHTML = ICON_PAUSE;
-      playBtn.classList.add('playing');
-      setStatus('playing', true);
+      // seekOffset was just reset to 0 by teardown, doPlay will use it
+      await doPlay();
     }
 
   } catch (err) {
@@ -1077,41 +1240,77 @@ async function loadFile(file, overrideKey = null, autoplay = false) {
 // ══════════════════════════════════════════════════════════════════
 // Playback
 // ══════════════════════════════════════════════════════════════════
+async function doPlay() {
+  if (!audioBuffer) return;
+  // Always update OS state
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = 'playing';
+  }
+  try { mediaBridge.play().catch(() => {}); } catch (_) {}
+  if (nativeCtx.state === 'suspended') await nativeCtx.resume();
+  
+  if (isPlaying) return;
+  
+  await Tone.start();
+  createAndStartSource(seekOffset);
+  seekContextStart = Tone.now();
+  isPlaying = true;
+  playBtn.innerHTML = ICON_PAUSE;
+  playBtn.classList.add('playing');
+  setStatus('playing', true);
+  if ('mediaSession' in navigator) updateMediaSessionPositionState();
+
+  // Update lastPlayed in DB
+  if (currentFileKey) {
+    const tx = db.transaction('audioFiles', 'readwrite');
+    const store = tx.objectStore('audioFiles');
+    store.index('fileKey').get(currentFileKey).onsuccess = e => {
+      const rec = e.target.result;
+      if (rec) { rec.lastPlayed = Date.now(); store.put(rec); }
+    };
+  }
+}
+
+async function doPause() {
+  if (!audioBuffer) return;
+  // Always update OS state
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  try { mediaBridge.pause(); } catch (_) {}
+  if (nativeCtx.state === 'running') {
+    nativeCtx.suspend().catch(() => {});
+  }
+  
+  if (!isPlaying) return;
+  
+  seekOffset = getCurrentPos();
+  stopSource();
+  isPlaying = false;
+  playBtn.innerHTML = ICON_PLAY;
+  playBtn.classList.remove('playing');
+  setStatus('paused', true);
+  if ('mediaSession' in navigator) updateMediaSessionPositionState();
+
+  try { mediaBridge.pause(); } catch (_) {}
+  
+  if (nativeCtx.state === 'running') {
+    await nativeCtx.suspend();
+  }
+}
+
 playBtn.addEventListener('click', async () => {
   if (!audioBuffer) return;
-  await Tone.start();
-  if (!isPlaying) {
-    createAndStartSource(seekOffset);
-    seekContextStart = Tone.now();
-    isPlaying = true;
-    playBtn.innerHTML = ICON_PAUSE;
-    playBtn.classList.add('playing');
-    setStatus('playing', true);
-    // Update lastPlayed in DB
-    if (currentFileKey) {
-      const tx = db.transaction('audioFiles', 'readwrite');
-      const store = tx.objectStore('audioFiles');
-      store.index('fileKey').get(currentFileKey).onsuccess = e => {
-        const rec = e.target.result;
-        if (rec) { rec.lastPlayed = Date.now(); store.put(rec); }
-      };
-    }
-  } else {
-    seekOffset = getCurrentPos();
-    stopSource();
-    isPlaying = false;
-    playBtn.innerHTML = ICON_PLAY;
-    playBtn.classList.remove('playing');
-    setStatus('paused', true);
-  }
+  if (!isPlaying) await doPlay();
+  else await doPause();
 });
 
-loopEnabled = true;
-loopBtn.classList.add('active');
+const savedLoop = localStorage.getItem('loopEnabled');
+loopEnabled = savedLoop !== null ? savedLoop === 'true' : true;
+loopBtn.classList.toggle('active', loopEnabled);
 loopBtn.addEventListener('click', () => {
   loopEnabled = !loopEnabled;
   if (sourceNode) sourceNode.loop = loopEnabled;
   loopBtn.classList.toggle('active', loopEnabled);
+  localStorage.setItem('loopEnabled', loopEnabled);
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -1165,14 +1364,14 @@ async function renderHistory() {
   });
 }
 
-async function loadFromHistory(record, preset) {
+async function loadFromHistory(record, preset, autoplay = true, initialPos = 0) {
   // Apply saved preset before loading so audio chain picks them up
   if (preset) applyPreset(preset);
 
   const blob = new Blob([record.data], { type: record.type || 'audio/mpeg' });
   const file = new File([blob], record.name, { type: record.type });
 
-  await loadFile(file, record.fileKey, true /* autoplay */);
+  await loadFile(file, record.fileKey, autoplay, initialPos);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1217,6 +1416,44 @@ function setStatus(msg, active = false) {
   statusEl.className   = 'status' + (active ? ' active' : '');
 }
 
+function updateMediaSessionPositionState() {
+  if ('mediaSession' in navigator && audioBuffer) {
+    try {
+      const dur = audioBuffer.duration;
+      const pos = Math.max(0, Math.min(getCurrentPos(), dur));
+      navigator.mediaSession.setPositionState({
+        duration: dur,
+        playbackRate: parseFloat(speedSlider.value),
+        position: pos
+      });
+    } catch (e) {}
+  }
+}
+
+function setupMediaSession() {
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.setActionHandler('play', async () => {
+      await doPlay();
+    });
+    navigator.mediaSession.setActionHandler('pause', async () => {
+      await doPause();
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => { playNext(); });
+    navigator.mediaSession.setActionHandler('previoustrack', () => { playPrev(); });
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      const t = details.seekTime;
+      isSeeking = false;
+      seekOffset = t;
+      seekContextStart = Tone.now();
+      try { mediaBridge.currentTime = t; } catch (_) {}
+      if (audioBuffer && isPlaying) createAndStartSource(t);
+      seekCurrent.textContent = formatTime(t);
+      updateMediaSessionPositionState();
+    });
+  }
+}
+setupMediaSession();
+
 // ══════════════════════════════════════════════════════════════════
 // Seek bar
 // ══════════════════════════════════════════════════════════════════
@@ -1238,11 +1475,32 @@ function getCurrentPos() {
 }
 
 let advancingToNext = false;
+let lastSaveTime = 0;
+
+function savePlaybackState() {
+  if (currentFileKey) {
+    localStorage.setItem('lastPlayedFile', currentFileKey);
+    localStorage.setItem('lastPlayedPos', getCurrentPos().toString());
+  } else {
+    localStorage.removeItem('lastPlayedFile');
+    localStorage.removeItem('lastPlayedPos');
+  }
+}
+
+window.addEventListener('pagehide', savePlaybackState);
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') savePlaybackState();
+});
 
 function updateSeekBar() {
   if (isSeeking || !audioBuffer) return;
   const pos = getCurrentPos();
   const dur = audioBuffer.duration;
+  
+  if (Date.now() - lastSaveTime > 1000) {
+    savePlaybackState();
+    lastSaveTime = Date.now();
+  }
   const pct = dur > 0 ? (pos / dur * 100) : 0;
   seekSlider.value = pos;
   seekSlider.style.setProperty('--fill', pct + '%');
@@ -1274,14 +1532,48 @@ async function playNext() {
   advancingToNext = false;
 }
 
-function initSeekBar() {
+async function playPrev() {
+  const currentPos = getCurrentPos();
+  if (currentPos > 3) {
+    // Just restart song
+    seekOffset = 0;
+    seekContextStart = Tone.now();
+    if (audioBuffer && isPlaying) createAndStartSource(0);
+    updateSeekBar();
+    updateMediaSessionPositionState();
+  } else {
+    // Go to previous track
+    const files = await dbGetAllFiles();
+    const idx   = files.findIndex(f => f.fileKey === currentFileKey);
+    const prev  = files[idx - 1];
+    if (prev) {
+      const preset = await dbGetPreset(prev.fileKey).catch(() => null);
+      await loadFromHistory(prev, preset);
+    } else {
+      // Just restart
+      seekOffset = 0;
+      seekContextStart = Tone.now();
+      if (audioBuffer && isPlaying) createAndStartSource(0);
+      updateSeekBar();
+      updateMediaSessionPositionState();
+    }
+  }
+}
+
+prevBtn.addEventListener('click', () => { if (audioBuffer) playPrev(); });
+nextBtn.addEventListener('click', () => { if (audioBuffer) playNext(); });
+
+function initSeekBar(initialPos = 0) {
   const dur = audioBuffer.duration;
+  const pos = Math.min(initialPos, dur);
   seekSlider.max = dur;
-  seekSlider.value = 0;
+  seekSlider.value = pos;
   seekSlider.disabled = false;
   seekTotal.textContent = formatTime(dur);
-  seekCurrent.textContent = '0:00';
-  seekOffset = 0;
+  seekCurrent.textContent = formatTime(pos);
+  seekOffset = pos;
+  const pct = dur > 0 ? (pos / dur * 100) : 0;
+  seekSlider.style.setProperty('--fill', pct + '%');
 }
 
 function resetSeekBar() {
@@ -1311,6 +1603,8 @@ seekSlider.addEventListener('change', () => {
     createAndStartSource(t);
   }
   seekCurrent.textContent = formatTime(t);
+  updateMediaSessionPositionState();
+  savePlaybackState();
 });
 
 function escHtml(str) {
@@ -1503,7 +1797,20 @@ async function scanDownloads() {
 (async () => {
   try {
     db = await openDB();
-    renderHistory();
+    await renderHistory();
+    
+    // Restore previous playback state
+    const lastFile = localStorage.getItem('lastPlayedFile');
+    const lastPos = parseFloat(localStorage.getItem('lastPlayedPos')) || 0;
+    if (lastFile) {
+      const files = await dbGetAllFiles();
+      const record = files.find(f => f.fileKey === lastFile);
+      if (record) {
+        const preset = await dbGetPreset(lastFile).catch(() => null);
+        await loadFromHistory(record, preset, false, lastPos);
+      }
+    }
+    
     scanDownloads(); // background — imports any new files from disk
   } catch (err) {
     console.warn('IndexedDB unavailable, history disabled:', err);

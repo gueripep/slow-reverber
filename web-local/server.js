@@ -5,7 +5,7 @@ const path     = require('path');
 const { randomUUID } = require('crypto');
 
 const PORT      = process.env.PORT || 3847;
-const DOWNLOADS = path.join(__dirname, 'downloads');
+const DOWNLOADS = path.join(__dirname, '..', 'downloads');
 const YTDLP     = '/opt/homebrew/bin/yt-dlp';
 const FFMPEG    = '/opt/homebrew/bin/ffmpeg';
 // Change to 'safari' or 'firefox' if you don't use Chrome
@@ -64,6 +64,21 @@ const server = http.createServer((req, res) => {
       res.end(js);
     } catch {
       res.writeHead(500); res.end('Cannot read soundtouch-processor.js');
+    }
+    return;
+  }
+
+  // ── Serve icons ───────────────────────────────────────────────────
+  const icons = ['/favicon.png', '/favicon.ico', '/favicon-16x16.png', '/favicon-32x32.png', '/apple-touch-icon.png', '/android-chrome-192x192.png', '/android-chrome-512x512.png'];
+  if (icons.includes(u.pathname)) {
+    const iconPath = path.join(__dirname, 'icons', u.pathname.slice(1));
+    try {
+      const img = fs.readFileSync(iconPath);
+      const ext = u.pathname.endsWith('.ico') ? 'image/x-icon' : 'image/png';
+      res.writeHead(200, { 'Content-Type': ext });
+      res.end(img);
+    } catch {
+      res.writeHead(404); res.end();
     }
     return;
   }
@@ -260,7 +275,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  slow + reverb  →  http://localhost:${PORT}\n`);
+  console.log(`\n  Slowcort  →  http://localhost:${PORT}\n`);
   if (!fs.existsSync(YTDLP))  console.warn('  ⚠  yt-dlp not found  →  brew install yt-dlp');
   if (!fs.existsSync(FFMPEG)) console.warn('  ⚠  ffmpeg not found   →  brew install ffmpeg');
   console.log('');
